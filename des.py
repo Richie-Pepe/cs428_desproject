@@ -87,10 +87,12 @@ print(user_input)
 
 plaintext = bytes(user_input, 'utf-8')
 plaintext_length = len(plaintext)
-print(plaintext_length)
+
 block_num = (plaintext_length // 8) + 1
 padding_size = 8 - (plaintext_length % 8)
 
+#print debugging info
+print(plaintext_length)
 print("% s % s" % (block_num, padding_size))
 
 ciphertext = bytearray(block_num * 8)
