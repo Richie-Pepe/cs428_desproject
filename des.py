@@ -1,23 +1,91 @@
 #FUNCTION DECLARATIONS
-def permutate(data, p_matrix):
+def permutate(data, p_matrix, data_length):
     result = 0
     
     for i in range(len(p_matrix)):
         #get bit
-        bit = (((0x1 << p_matrix[i]) & data) >> p_matrix[i]) << i
+        bit = (((0x1 << (data_length - (p_matrix[i]+1))) & data) >> (data_length - (p_matrix[i]+1))) << (len(p_matrix) - (i+1))
         #put bit into result
         result = result + bit
     
     return result
 
 def s_box(data):
-    pass
+    result = 0
+    
+    for i in range(8):
+        sbox_in = ((0x3f << (48 - (6 * (i + 1 )))) & data) >> (48 - (6 * (i + 1)))
+        sbox_out = s_box_table[i][sbox_in]
+        temp = sbox_out << (32 - (4  *  (i + 1)))
+        result = result + temp
+        
+    return result
+    
+def subkey_shift(subkey):
+    bit = (subkey & 0x8000000) >> 27
+    subkey = ((subkey << 1) | bit) & 0xFFFFFFF
+    return subkey
+    
+def key_gen(master_key):
+    bitmask_28 = 0xFFFFFFF
+    key_list = []
+    print("KEYGEN INFORMATION")
+    print("Master key:\t\t" + hex(sample_master_key))
+    
+    key = permutate(master_key, pc_1, 64)
+    print("Permutated master key:\t" + hex(key))
+    
+    subkey_left = ((bitmask_28 << 28) & key) >> 28
+    subkey_right = bitmask_28 & key
+    
+    print("\nRound\tLeft Subkey\tRight Subkey\tFinal Subkey")
+    for i in range(16):
+        for j in range(key_schedule[i]):
+            subkey_left = subkey_shift(subkey_left)
+            subkey_right = subkey_shift(subkey_right)
+
+        final_subkey = ((subkey_left << 28) + subkey_right)
+        print("Final Subkey pre perm:\t% s" % (hex(final_subkey)))
+        final_subkey = permutate(final_subkey, pc_2, 56)
+        print("Final Subkey post perm:\t% s" % (hex(final_subkey)))
+
+        print("% s\t% s\t% s\t% s" % (i, hex(subkey_left), hex(subkey_right), hex(final_subkey)))
+        print()
+        key_list.append(final_subkey)
+        
+    print("\nSubkey List:")
+    for i in range(16):
+        print(hex(key_list[i]))
+        
+    return key_list
 
 def feistel_function(data, key):
-    pass
+    data = permutate(data, p_box_expansion, 32) #expand
+    print("FEISTEL FUNCTION\nExpanded Data: % s" % (hex(data)))
+    data = data ^ key                       #xor with key
+    print("Expanded data xored with key: % s" % (hex(data)))
+    data = s_box(data)                      #apply sbox
+    print("Data ran through xbox: % s" % (hex(data)))
+    data = permutate(data, p_box_straight, 32)  #straight permutation
+    print("Sbox output straight permutated: % s" % (hex(data)))
+    return data
     
 def feistel_round(data, key):
-    pass
+    bitmask_32 = 0xFFFFFFFF
+    
+    #split data
+    data_left = ((bitmask_32 << 32) & data) >> 32
+    data_right = bitmask_32 & data
+    
+    #run feistel function
+    result_right = data_left ^ feistel_function(data_right, key)
+    print("Feistel function output xored with left: % s" % (hex(result_right)))
+    result_left = data_right << 32
+    
+    #combine results
+    result = result_right + result_left
+    print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
+    return result
     
 
 #PERMUTATION DEFINITIONS
@@ -42,7 +110,7 @@ initial_permutation =   [57, 49, 41, 33, 25, 17, 9, 1,
                          59, 51, 43, 35, 27, 19, 11, 3,
                          61, 53, 45, 37, 29, 21, 13, 5,
                          63, 55, 47, 39, 31, 23, 15, 7,
-                         56, 48, 40, 31, 23, 16, 8, 0,
+                         56, 48, 40, 32, 24, 16, 8, 0,
                          58, 50, 42, 34, 26, 18, 10, 2,
                          60, 52, 44, 36, 28, 20, 12, 4,
                          62, 54, 46, 38, 30, 22, 14, 6]
@@ -71,19 +139,85 @@ pc_2 =  [13, 16, 10, 23, 0, 4, 2, 27,
          50, 44, 32, 47, 43, 48, 38, 55,
          33, 52, 45, 41, 49, 35, 28, 31]
 
-s_box_table = [14, 0, 4, 15, 13, 7, 1, 4,
-               3, 14, 15, 2, 11, 13, 8, 1,
-               3, 10, 10, 6, 6, 12, 12, 11, 
-               5, 9, 9, 5, 0, 3, 7, 8,
-               4, 15, 1, 12, 14, 8, 8, 2,
-               13, 4, 6, 9, 2, 1, 11, 7,
-               15, 5, 12, 11, 9, 3, 7, 14,
-               3, 10, 10, 0, 5, 6, 0, 13]
+s_box_table = [[14, 0, 4, 15, 13, 7, 1, 4,
+                2, 14, 15, 2, 11, 13, 8, 1,
+                3, 10, 10, 6, 6, 12, 12, 11, 
+                5, 9, 9, 5, 0, 3, 7, 8,
+                4, 15, 1, 12, 14, 8, 8, 2,
+                13, 4, 6, 9, 2, 1, 11, 7,
+                15, 5, 12, 11, 9, 3, 7, 14,
+                3, 10, 10, 0, 5, 6, 0, 13],
+
+                [15, 3, 1, 13, 8, 4, 14, 7,
+                6, 15, 11, 2, 3, 8, 4, 14,
+                9, 12, 7, 0, 2, 1, 13, 10,
+                12, 6, 0, 9, 5, 11, 10, 5,
+                0, 13, 14, 8, 7, 10, 11, 1,
+                10, 3, 4, 15, 13, 4, 1, 2,
+                5, 11, 8, 6, 12, 7, 6, 12,
+                9, 0, 3, 5, 2, 14, 15, 9],
+
+                [10, 13, 0, 7, 9, 0, 14, 9, 
+                6, 3, 3, 4, 15, 6, 5, 10,
+                1, 2, 13, 8, 12, 5, 7, 14,
+                11, 12, 4, 11, 2, 15, 8, 1,
+                13, 1, 6, 10, 4, 13, 9, 0,
+                8, 6, 15, 9, 3, 8, 0, 7,
+                11, 4, 1, 15, 2, 14, 12, 3,
+                5, 11, 10, 5, 14, 2, 7, 12],
+
+                [7, 13, 13, 8, 14, 11, 3, 5,
+                0, 6, 6, 15, 9, 0, 10, 3,
+                1, 4, 2, 7, 8, 2, 5, 12,
+                11, 1, 12, 10, 4, 14, 15, 9,
+                10, 3, 6, 15, 9, 0, 0, 6, 
+                12, 10, 11, 1, 7, 13, 13, 8,
+                15, 9, 1, 4, 3, 5, 14, 11,
+                5, 12, 2, 7, 8, 2, 4, 14],
+
+                [2, 14, 12, 11, 4, 2, 1, 12,
+                7, 4, 10, 7, 11, 13, 6, 1,
+                8, 5, 5, 0, 3, 15, 15, 10,
+                13, 3, 0, 9, 14, 8, 9, 6,
+                4, 11, 2, 8, 1, 12, 11, 7,
+                10, 1, 13, 14, 7, 2, 8, 13,
+                15, 6, 9, 15, 12, 0, 5, 9,
+                6, 10, 3, 4, 0, 5, 14, 3],
+
+                [12, 10, 1, 15, 10, 4, 15, 2,
+                9, 7, 2, 12, 6, 9, 8, 5,
+                0, 6, 13, 1, 3, 13, 4, 14,
+                14, 0, 7, 11, 5, 3, 11, 8,
+                9, 4, 14, 3, 15, 2, 5, 12,
+                2, 9, 8, 5, 12, 15, 3, 10,
+                7, 11, 0, 14, 4, 1, 10, 7,
+                1, 6, 13, 0, 11, 8, 6, 13],
+
+                [4, 13, 11, 0, 2, 11, 14, 7,
+                15, 4, 0, 9, 8, 1, 13, 10,
+                3, 14, 12, 3, 9, 5, 7, 12, 
+                5, 2, 10, 15, 6, 8, 1, 6,
+                1, 6, 4, 11, 11, 13, 13, 8,
+                12, 1, 3, 4, 7, 10, 7, 14,
+                10, 9, 15, 5, 6, 0, 8, 15,
+                0, 14, 5, 2, 9, 3, 2, 12],
+
+                [13, 1, 2, 15, 8, 13, 4, 8, 
+                6, 10, 15, 3, 11, 7, 1, 4,
+                10, 12, 9, 5, 3, 6, 14, 11,
+                5, 0, 0, 14, 12, 9, 7, 2,
+                7, 2, 11, 1, 4, 14, 1, 7, 
+                8, 4, 12, 10, 14, 8, 2, 13,
+                0, 15, 6, 12, 10, 9, 13, 0,
+                15, 3, 3, 5, 5, 6, 8, 11]]
+                
+key_schedule = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1]
+
+sample_master_key = 0xC107FBF1D93DC48C
 
 #PROGRAM START
 user_input = input("Enter plaintext: ")
 
-print(user_input)
 
 plaintext = bytes(user_input, 'utf-8')
 plaintext_length = len(plaintext)
@@ -92,22 +226,41 @@ block_num = (plaintext_length // 8) + 1
 padding_size = 8 - (plaintext_length % 8)
 
 #print debugging info
-print(plaintext_length)
-print("% s % s" % (block_num, padding_size))
+print()
+print("Plaintext Length: % s bytes" % (plaintext_length))
+print("% s Blocks\n% s Padded bytes\n" % (block_num, padding_size))
 
 ciphertext = bytearray(block_num * 8)
 
+keys = key_gen(sample_master_key)
+
 for i in range(block_num):
     block = 0
+    
+    #split data into blocks 
     for j in range(8):
         if not (j >= (8 - padding_size) and i == (block_num - 1)):
             temp = plaintext[(i * 8) + j] & 0xff
             block = block + (temp << (j * 8))
-            
+    
+    print("Block pre initial perm: % s" % (hex(block)))
+    block = permutate(block, initial_permutation, 64)
+    print("Block post initial perm: % s" % (hex(block)))
+    
+    #16 feistel rounds
+    for j in range(16):
+        print("\nFEISTEL ROUND % s" % (j))
+        print("% s % s" % (hex(block), hex(keys[j])))
+        block = feistel_round(block, keys[j])
+        
+    block = permutate(block, final_permutation, 64)
+    
     for j in range(8):
         temp = (block & (0xff << (j * 8))) >> (j * 8)
         ciphertext[(i * 8) + j] = temp
-        
-    print(block)
 
-print(ciphertext)
+print()
+print(''.join(format(x, '02x') for x in ciphertext))
+
+
+#expect 0x1B15B78A
