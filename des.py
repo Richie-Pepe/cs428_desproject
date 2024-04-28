@@ -1,3 +1,18 @@
+# DES Algorithm Project CS 428 April 2024
+# Members: Owen Lawrence, Richard Pepe, Peter Nguyen, Raymond Soto
+# Programming Language: Python
+
+# sbox and other matrix constants came from 
+# https://en.m.wikipedia.org/wiki/DES_supplementary_material
+
+# test cases assisted from this online DES calculator
+
+# History:
+# 1 Richard - initial code
+# 2 Peter - changed a few bytes in sbox 7 & 8. Added header description comments
+#           added a comments about sbox and user input
+# 3 
+
 #FUNCTION DECLARATIONS
 def permutate(data, p_matrix, data_length):
     result = 0
@@ -13,6 +28,10 @@ def permutate(data, p_matrix, data_length):
 def s_box(data):
     result = 0
     
+    # For each group of 6 bits, the sbox_in gets each of those 6 bits
+    #  which is used as row & col input into the the s_box_table variable
+    #  since the s_box_table is formatted differently, there's no
+    #  need to extract the row and col from a group of 6 bits.
     for i in range(8):
         sbox_in = ((0x3f << (48 - (6 * (i + 1 )))) & data) >> (48 - (6 * (i + 1)))
         sbox_out = s_box_table[i][sbox_in]
@@ -29,31 +48,31 @@ def subkey_shift(subkey):
 def key_gen(master_key):
     bitmask_28 = 0xFFFFFFF
     key_list = []
-    print("KEYGEN INFORMATION")
-    print("Master key:\t\t" + hex(sample_master_key))
+    #print("KEYGEN INFORMATION")
+    #print("Master key:\t\t" + hex(sample_master_key))
     
     key = permutate(master_key, pc_1, 64)
-    print("Permutated master key:\t" + hex(key))
+    #print("Permutated master key:\t" + hex(key))
     
     subkey_left = ((bitmask_28 << 28) & key) >> 28
     subkey_right = bitmask_28 & key
     
-    print("\nRound\tLeft Subkey\tRight Subkey\tFinal Subkey")
+    #print("\nRound\tLeft Subkey\tRight Subkey\tFinal Subkey")
     for i in range(16):
         for j in range(key_schedule[i]):
             subkey_left = subkey_shift(subkey_left)
             subkey_right = subkey_shift(subkey_right)
 
         final_subkey = ((subkey_left << 28) + subkey_right)
-        print("Final Subkey pre perm:\t% s" % (hex(final_subkey)))
+        #print("Final Subkey pre perm:\t% s" % (hex(final_subkey)))
         final_subkey = permutate(final_subkey, pc_2, 56)
-        print("Final Subkey post perm:\t% s" % (hex(final_subkey)))
+        #print("Final Subkey post perm:\t% s" % (hex(final_subkey)))
 
-        print("% s\t% s\t% s\t% s" % (i, hex(subkey_left), hex(subkey_right), hex(final_subkey)))
-        print()
+        #print("% s\t% s\t% s\t% s" % (i, hex(subkey_left), hex(subkey_right), hex(final_subkey)))
+        #print()
         key_list.append(final_subkey)
         
-    print("\nSubkey List:")
+    #print("\nSubkey List:")
     for i in range(16):
         print(hex(key_list[i]))
         
@@ -61,30 +80,52 @@ def key_gen(master_key):
 
 def feistel_function(data, key):
     data = permutate(data, p_box_expansion, 32) #expand
-    print("FEISTEL FUNCTION\nExpanded Data: % s" % (hex(data)))
+    #print("FEISTEL FUNCTION\nExpanded Data: % s" % (hex(data)))
     data = data ^ key                       #xor with key
-    print("Expanded data xored with key: % s" % (hex(data)))
+    #print("Expanded data xored with key: % s" % (hex(data)))
     data = s_box(data)                      #apply sbox
-    print("Data ran through xbox: % s" % (hex(data)))
+    #print("Data ran through xbox: % s" % (hex(data)))
     data = permutate(data, p_box_straight, 32)  #straight permutation
-    print("Sbox output straight permutated: % s" % (hex(data)))
+    #print("Sbox output straight permutated: % s" % (hex(data)))
     return data
     
-def feistel_round(data, key):
+#def feistel_round(data, key):
+#    bitmask_32 = 0xFFFFFFFF
+#    
+#    #split data
+#    data_left = ((bitmask_32 << 32) & data) >> 32
+#    data_right = bitmask_32 & data
+#    
+#    #run feistel function
+#    result_right = data_left ^ feistel_function(data_right, key)
+#    print("Feistel function output xored with left: % s" % (hex(result_right)))
+#    result_left = data_right << 32
+#    
+#    #combine results
+#    result = result_right + result_left
+#    print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
+#    return result
+
+def feistel_round(data, key_arr):
     bitmask_32 = 0xFFFFFFFF
     
     #split data
     data_left = ((bitmask_32 << 32) & data) >> 32
     data_right = bitmask_32 & data
+   
+    for x in range(16):
+        #run feistel function
+        result_right = data_left ^ feistel_function(data_right, key_arr[x])
+        #print("Feistel function output xored with left: % s" % (hex(result_right)))
+        result_left = data_right
     
-    #run feistel function
-    result_right = data_left ^ feistel_function(data_right, key)
-    print("Feistel function output xored with left: % s" % (hex(result_right)))
-    result_left = data_right << 32
+        data_right = result_right
+        data_left = result_left
+        #print("% s % s\n" % (hex(data_left), hex(data_right)))
     
     #combine results
-    result = result_right + result_left
-    print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
+    result = (result_right << 32) + result_left
+    #print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
     return result
     
 
@@ -198,7 +239,7 @@ s_box_table = [[14, 0, 4, 15, 13, 7, 1, 4,
                 3, 14, 12, 3, 9, 5, 7, 12, 
                 5, 2, 10, 15, 6, 8, 1, 6,
                 1, 6, 4, 11, 11, 13, 13, 8,
-                12, 1, 3, 4, 7, 10, 7, 14,
+                12, 1, 3, 4, 7, 10, 14, 7, #swapped 7 and 14 being adjacent elements
                 10, 9, 15, 5, 6, 0, 8, 15,
                 0, 14, 5, 2, 9, 3, 2, 12],
 
@@ -207,7 +248,7 @@ s_box_table = [[14, 0, 4, 15, 13, 7, 1, 4,
                 10, 12, 9, 5, 3, 6, 14, 11,
                 5, 0, 0, 14, 12, 9, 7, 2,
                 7, 2, 11, 1, 4, 14, 1, 7, 
-                8, 4, 12, 10, 14, 8, 2, 13,
+                9, 4, 12, 10, 14, 8, 2, 13, #changed from 8 to 9
                 0, 15, 6, 12, 10, 9, 13, 0,
                 15, 3, 3, 5, 5, 6, 8, 11]]
                 
@@ -216,8 +257,7 @@ key_schedule = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1]
 sample_master_key = 0xC107FBF1D93DC48C
 
 #PROGRAM START
-user_input = input("Enter plaintext: ")
-
+user_input = input("Enter plaintext: ") # in ascii not hex
 
 plaintext = bytes(user_input, 'utf-8')
 plaintext_length = len(plaintext)
@@ -248,16 +288,20 @@ for i in range(block_num):
     print("Block post initial perm: % s" % (hex(block)))
     
     #16 feistel rounds
-    for j in range(16):
-        print("\nFEISTEL ROUND % s" % (j))
-        print("% s % s" % (hex(block), hex(keys[j])))
-        block = feistel_round(block, keys[j])
+    #for j in range(16):
+    #    print("\nFEISTEL ROUND % s" % (j))
+    #    print("% s % s" % (hex(block), hex(keys[j])))
+    #    block = feistel_round(block, keys[j])
+    
+    block = feistel_round(block, keys)
         
     block = permutate(block, final_permutation, 64)
     
+    print("% s" % (hex(block)))
+    
     for j in range(8):
         temp = (block & (0xff << (j * 8))) >> (j * 8)
-        ciphertext[(i * 8) + j] = temp
+        ciphertext[(i * 8) + (7 - j)] = temp
 
 print()
 print(''.join(format(x, '02x') for x in ciphertext))
