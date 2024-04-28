@@ -13,6 +13,8 @@
 #           added a comments about sbox and user input
 # 3 
 
+import array as arr
+
 #FUNCTION DECLARATIONS
 def permutate(data, p_matrix, data_length):
     result = 0
@@ -48,65 +50,34 @@ def subkey_shift(subkey):
 def key_gen(master_key):
     bitmask_28 = 0xFFFFFFF
     key_list = []
-    #print("KEYGEN INFORMATION")
-    #print("Master key:\t\t" + hex(sample_master_key))
     
     key = permutate(master_key, pc_1, 64)
-    #print("Permutated master key:\t" + hex(key))
     
     subkey_left = ((bitmask_28 << 28) & key) >> 28
     subkey_right = bitmask_28 & key
     
-    #print("\nRound\tLeft Subkey\tRight Subkey\tFinal Subkey")
     for i in range(16):
         for j in range(key_schedule[i]):
             subkey_left = subkey_shift(subkey_left)
             subkey_right = subkey_shift(subkey_right)
 
         final_subkey = ((subkey_left << 28) + subkey_right)
-        #print("Final Subkey pre perm:\t% s" % (hex(final_subkey)))
         final_subkey = permutate(final_subkey, pc_2, 56)
-        #print("Final Subkey post perm:\t% s" % (hex(final_subkey)))
 
-        #print("% s\t% s\t% s\t% s" % (i, hex(subkey_left), hex(subkey_right), hex(final_subkey)))
-        #print()
+
         key_list.append(final_subkey)
-        
-    #print("\nSubkey List:")
-    for i in range(16):
-        print(hex(key_list[i]))
-        
+
     return key_list
 
 def feistel_function(data, key):
     data = permutate(data, p_box_expansion, 32) #expand
-    #print("FEISTEL FUNCTION\nExpanded Data: % s" % (hex(data)))
     data = data ^ key                       #xor with key
-    #print("Expanded data xored with key: % s" % (hex(data)))
     data = s_box(data)                      #apply sbox
-    #print("Data ran through xbox: % s" % (hex(data)))
     data = permutate(data, p_box_straight, 32)  #straight permutation
-    #print("Sbox output straight permutated: % s" % (hex(data)))
-    return data
     
-#def feistel_round(data, key):
-#    bitmask_32 = 0xFFFFFFFF
-#    
-#    #split data
-#    data_left = ((bitmask_32 << 32) & data) >> 32
-#    data_right = bitmask_32 & data
-#    
-#    #run feistel function
-#    result_right = data_left ^ feistel_function(data_right, key)
-#    print("Feistel function output xored with left: % s" % (hex(result_right)))
-#    result_left = data_right << 32
-#    
-#    #combine results
-#    result = result_right + result_left
-#    print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
-#    return result
+    return data
 
-def feistel_round(data, key_arr):
+def feistel_encryption_rounds(data, key_arr):
     bitmask_32 = 0xFFFFFFFF
     
     #split data
@@ -116,16 +87,14 @@ def feistel_round(data, key_arr):
     for x in range(16):
         #run feistel function
         result_right = data_left ^ feistel_function(data_right, key_arr[x])
-        #print("Feistel function output xored with left: % s" % (hex(result_right)))
         result_left = data_right
     
         data_right = result_right
         data_left = result_left
-        #print("% s % s\n" % (hex(data_left), hex(data_right)))
     
     #combine results
     result = (result_right << 32) + result_left
-    #print("% s % s % s % s % s" % (hex(data_left), hex(data_right), hex(result_left), hex(result_right), hex(result)))
+
     return result
     
 
@@ -256,9 +225,12 @@ key_schedule = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1]
 
 sample_master_key = 0xC107FBF1D93DC48C
 
+
+
 #PROGRAM START
 user_input = input("Enter plaintext: ") # in ascii not hex
 
+#get padding and length info
 plaintext = bytes(user_input, 'utf-8')
 plaintext_length = len(plaintext)
 
@@ -270,7 +242,8 @@ print()
 print("Plaintext Length: % s bytes" % (plaintext_length))
 print("% s Blocks\n% s Padded bytes\n" % (block_num, padding_size))
 
-ciphertext = bytearray(block_num * 8)
+#ciphertext = bytearray(block_num * 8)
+ciphertext = arr.array('Q', [0 for i in range(block_num)])
 
 keys = key_gen(sample_master_key)
 
@@ -281,30 +254,23 @@ for i in range(block_num):
     for j in range(8):
         if not (j >= (8 - padding_size) and i == (block_num - 1)):
             temp = plaintext[(i * 8) + j] & 0xff
-            block = block + (temp << (j * 8))
+            block = block + (temp << ((8 - (j+1)) * 8))
     
-    print("Block pre initial perm: % s" % (hex(block)))
+    #add padding
+    if i == (block_num - 1):
+        for j in range(padding_size):
+            block = block + (padding_size << (j * 8))
+    
+    print("Plaintext block % s: % s" % (i, hex(block)))
+    
     block = permutate(block, initial_permutation, 64)
-    print("Block post initial perm: % s" % (hex(block)))
-    
-    #16 feistel rounds
-    #for j in range(16):
-    #    print("\nFEISTEL ROUND % s" % (j))
-    #    print("% s % s" % (hex(block), hex(keys[j])))
-    #    block = feistel_round(block, keys[j])
-    
-    block = feistel_round(block, keys)
-        
+    block = feistel_encryption_rounds(block, keys)
     block = permutate(block, final_permutation, 64)
     
-    print("% s" % (hex(block)))
+    ciphertext[i] = block
     
-    for j in range(8):
-        temp = (block & (0xff << (j * 8))) >> (j * 8)
-        ciphertext[(i * 8) + (7 - j)] = temp
 
+#display encryption results
 print()
-print(''.join(format(x, '02x') for x in ciphertext))
-
-
-#expect 0x1B15B78A
+for i in range(block_num):
+    print("Ciphertext block % s: % s" % (i, hex(ciphertext[i])))
